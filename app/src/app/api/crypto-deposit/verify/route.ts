@@ -1,37 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Connection, PublicKey } from '@solana/web3.js';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { Connection } from '@solana/web3.js';
+import { kv } from '@vercel/kv';
 
-// File-based store of used transaction signatures (persists across restarts)
-// In production, this should be in a database!
-const TX_FILE = join(process.cwd(), 'data', 'used_transactions.json');
+// Key for used transactions in Vercel KV
+const USED_TX_KEY = 'used_transactions';
 
-function loadUsedTransactions(): Set<string> {
+async function loadUsedTransactions(): Promise<Set<string>> {
   try {
-    if (existsSync(TX_FILE)) {
-      const data = JSON.parse(readFileSync(TX_FILE, 'utf-8'));
-      return new Set(data);
-    }
+    const txArray = await kv.get<string[]>(USED_TX_KEY);
+    return new Set(txArray || []);
   } catch (error) {
     console.error('Failed to load used transactions:', error);
+    return new Set();
   }
-  return new Set();
 }
 
-function saveUsedTransactions(txSet: Set<string>): void {
+async function saveUsedTransactions(txSet: Set<string>): Promise<void> {
   try {
-    const dataDir = join(process.cwd(), 'data');
-    if (!existsSync(dataDir)) {
-      mkdirSync(dataDir, { recursive: true });
-    }
-    writeFileSync(TX_FILE, JSON.stringify(Array.from(txSet), null, 2));
+    await kv.set(USED_TX_KEY, Array.from(txSet));
   } catch (error) {
     console.error('Failed to save used transactions:', error);
+    throw error;
   }
 }
-
-const usedTransactions = loadUsedTransactions();
 
 // Verify a Solana transaction
 async function verifySolanaTransaction(
@@ -95,10 +86,6 @@ async function verifySolanaTransaction(
     
     // Check for USDT (SPL token) transfer
     if (currency === 'USDT') {
-      const USDT_MINT = 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB';
-      
-      // Look for token transfers in inner instructions
-      const innerInstructions = tx.meta?.innerInstructions || [];
       const instructions = tx.transaction.message.instructions;
       
       let usdtReceived = 0;
@@ -152,7 +139,6 @@ export async function POST(request: NextRequest) {
       currency, 
       expectedAmount,
       depositAddress,
-      walletAddress,
     } = body;
 
     if (!txSignature) {
@@ -164,6 +150,9 @@ export async function POST(request: NextRequest) {
 
     // Normalize the transaction signature (trim whitespace)
     const normalizedTxSig = txSignature.trim();
+
+    // Load used transactions from KV
+    const usedTransactions = await loadUsedTransactions();
 
     // CHECK FOR DUPLICATE TRANSACTION - CRITICAL SECURITY CHECK
     if (usedTransactions.has(normalizedTxSig)) {
@@ -214,7 +203,7 @@ export async function POST(request: NextRequest) {
     if (verificationResult.valid) {
       // MARK TRANSACTION AS USED - Prevent double-spending
       usedTransactions.add(normalizedTxSig);
-      saveUsedTransactions(usedTransactions);
+      await saveUsedTransactions(usedTransactions);
       console.log('Transaction marked as used:', normalizedTxSig);
 
       // Calculate USD value to credit
@@ -254,4 +243,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { kv } from '@vercel/kv';
 
-// File-based card store (persists across server restarts)
-const CARDS_FILE = join(process.cwd(), 'data', 'cards.json');
+// Key prefix for cards storage
+const CARDS_PREFIX = 'cards:';
 
 interface StoredCard {
   id: string;
@@ -19,31 +18,25 @@ interface StoredCard {
   cardHolder?: string;
 }
 
-function loadCards(): StoredCard[] {
+// Get cards for a wallet from Vercel KV
+async function getCards(walletAddress: string): Promise<StoredCard[]> {
   try {
-    // Ensure data directory exists
-    const dataDir = join(process.cwd(), 'data');
-    if (!existsSync(dataDir)) {
-      mkdirSync(dataDir, { recursive: true });
-    }
-    
-    if (!existsSync(CARDS_FILE)) {
-      return [];
-    }
-    
-    const data = readFileSync(CARDS_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch {
+    const cards = await kv.get<StoredCard[]>(`${CARDS_PREFIX}${walletAddress}`);
+    return cards || [];
+  } catch (error) {
+    console.error('Failed to get cards from KV:', error);
     return [];
   }
 }
 
-function saveCards(cards: StoredCard[]): void {
-  const dataDir = join(process.cwd(), 'data');
-  if (!existsSync(dataDir)) {
-    mkdirSync(dataDir, { recursive: true });
+// Save cards for a wallet to Vercel KV
+async function saveCards(walletAddress: string, cards: StoredCard[]): Promise<void> {
+  try {
+    await kv.set(`${CARDS_PREFIX}${walletAddress}`, cards);
+  } catch (error) {
+    console.error('Failed to save cards to KV:', error);
+    throw error;
   }
-  writeFileSync(CARDS_FILE, JSON.stringify(cards, null, 2));
 }
 
 // GET - Retrieve cards for a wallet
@@ -59,8 +52,7 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    const allCards = loadCards();
-    const userCards = allCards.filter(c => c.walletAddress === walletAddress);
+    const userCards = await getCards(walletAddress);
     
     return NextResponse.json({
       success: true,
@@ -97,14 +89,14 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const allCards = loadCards();
+    const userCards = await getCards(walletAddress);
     
     // Check if card already exists
-    const existingIndex = allCards.findIndex(c => c.cardId === cardId);
+    const existingIndex = userCards.findIndex(c => c.cardId === cardId);
     if (existingIndex !== -1) {
       // Update existing card
-      allCards[existingIndex] = {
-        ...allCards[existingIndex],
+      userCards[existingIndex] = {
+        ...userCards[existingIndex],
         lastFour,
         balance,
         cardNumber,
@@ -127,10 +119,10 @@ export async function POST(request: NextRequest) {
         expiry,
         cardHolder,
       };
-      allCards.push(newCard);
+      userCards.push(newCard);
     }
     
-    saveCards(allCards);
+    await saveCards(walletAddress, userCards);
     
     return NextResponse.json({
       success: true,
@@ -144,4 +136,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

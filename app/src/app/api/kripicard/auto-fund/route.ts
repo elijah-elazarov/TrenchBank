@@ -106,9 +106,9 @@ export async function POST(request: NextRequest) {
       depositAddress = await getDepositAddressFromCryptomus(depositResult.cryptomusUrl) || undefined;
     }
 
-    // Track deposit in file database
+    // Track deposit in database
     const paymentId = depositResult.paymentId || crypto.randomUUID();
-    const pendingDeposit = addPendingDeposit({
+    const pendingDeposit = await addPendingDeposit({
       paymentId,
       amountUsd: amount,
       amountCrypto: depositResult.amount ? `${depositResult.amount} ${currency}` : undefined,
@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
         const txSignature = await sendSolPayment(depositAddress, solAmount);
         
         // Update deposit status
-        markDepositAsSent(paymentId, txSignature);
+        await markDepositAsSent(paymentId, txSignature);
         
         return NextResponse.json({
           success: true,
@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
-  const summary = getDepositSummary();
+  const summary = await getDepositSummary();
   
   return NextResponse.json({
     message: 'Kripicard Auto-Fund API',

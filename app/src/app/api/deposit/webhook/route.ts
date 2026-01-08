@@ -1,16 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyWebhookSignature, isPaymentSuccessful, CryptomusWebhookPayload } from '@/lib/cryptomus';
+import { kv } from '@vercel/kv';
 
-// In-memory store for demo (in production, use a database)
-// We'll store deposits server-side and sync with client
-const serverDeposits: Map<string, {
+// Key prefix for webhook deposits in Vercel KV
+const WEBHOOK_DEPOSITS_PREFIX = 'webhook_deposit:';
+
+interface WebhookDeposit {
   orderId: string;
   walletAddress: string;
   amount: number;
   status: string;
   paymentId: string;
   paidAt?: string;
-}> = new Map();
+}
+
+async function saveWebhookDeposit(orderId: string, deposit: WebhookDeposit): Promise<void> {
+  try {
+    await kv.set(`${WEBHOOK_DEPOSITS_PREFIX}${orderId}`, deposit);
+  } catch (error) {
+    console.error('Failed to save webhook deposit:', error);
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -61,7 +71,7 @@ export async function POST(request: NextRequest) {
       console.log('Credit Amount:', creditAmount);
       
       // Store the successful deposit
-      serverDeposits.set(body.order_id, {
+      await saveWebhookDeposit(body.order_id, {
         orderId: body.order_id,
         walletAddress,
         amount: creditAmount,
@@ -70,18 +80,13 @@ export async function POST(request: NextRequest) {
         paidAt: new Date().toISOString(),
       });
       
-      // In a real app, you would:
-      // 1. Update database with payment status
-      // 2. Credit user's balance in database
-      // 3. Optionally trigger notifications
-      
       console.log('Deposit completed for wallet:', walletAddress, 'Amount:', creditAmount);
     } else if (body.is_final) {
       // Payment failed or cancelled
       console.log('=== PAYMENT FAILED/CANCELLED ===');
       console.log('Final Status:', body.status);
       
-      serverDeposits.set(body.order_id, {
+      await saveWebhookDeposit(body.order_id, {
         orderId: body.order_id,
         walletAddress,
         amount: 0,
@@ -103,7 +108,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
-// Export deposits for status checks
-export { serverDeposits };
-

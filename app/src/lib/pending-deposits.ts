@@ -3,13 +3,13 @@
  * 
  * Tracks Kripicard deposits via Cryptomus and automatically
  * triggers card creation when deposits are confirmed.
+ * 
+ * Uses Vercel KV for persistent storage.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { kv } from '@vercel/kv';
 
-const DATA_DIR = join(process.cwd(), 'data');
-const DEPOSITS_FILE = join(DATA_DIR, 'pending_deposits.json');
+const DEPOSITS_KEY = 'pending_deposits';
 
 export interface PendingDeposit {
   id: string;
@@ -31,37 +31,27 @@ export interface PendingDeposit {
   error?: string;
 }
 
-function ensureDataDir(): void {
-  if (!existsSync(DATA_DIR)) {
-    mkdirSync(DATA_DIR, { recursive: true });
-  }
-}
-
-export function loadPendingDeposits(): PendingDeposit[] {
+export async function loadPendingDeposits(): Promise<PendingDeposit[]> {
   try {
-    ensureDataDir();
-    if (existsSync(DEPOSITS_FILE)) {
-      const data = JSON.parse(readFileSync(DEPOSITS_FILE, 'utf-8'));
-      return data;
-    }
-    return [];
+    const deposits = await kv.get<PendingDeposit[]>(DEPOSITS_KEY);
+    return deposits || [];
   } catch (error) {
     console.error('Failed to load pending deposits:', error);
     return [];
   }
 }
 
-export function savePendingDeposits(deposits: PendingDeposit[]): void {
+export async function savePendingDeposits(deposits: PendingDeposit[]): Promise<void> {
   try {
-    ensureDataDir();
-    writeFileSync(DEPOSITS_FILE, JSON.stringify(deposits, null, 2));
+    await kv.set(DEPOSITS_KEY, deposits);
   } catch (error) {
     console.error('Failed to save pending deposits:', error);
+    throw error;
   }
 }
 
-export function addPendingDeposit(deposit: Omit<PendingDeposit, 'id' | 'createdAt' | 'status'>): PendingDeposit {
-  const deposits = loadPendingDeposits();
+export async function addPendingDeposit(deposit: Omit<PendingDeposit, 'id' | 'createdAt' | 'status'>): Promise<PendingDeposit> {
+  const deposits = await loadPendingDeposits();
   
   const newDeposit: PendingDeposit = {
     ...deposit,
@@ -71,18 +61,18 @@ export function addPendingDeposit(deposit: Omit<PendingDeposit, 'id' | 'createdA
   };
   
   deposits.push(newDeposit);
-  savePendingDeposits(deposits);
+  await savePendingDeposits(deposits);
   
   console.log('Added pending deposit:', newDeposit.paymentId);
   return newDeposit;
 }
 
-export function updateDepositStatus(
+export async function updateDepositStatus(
   paymentId: string, 
   status: PendingDeposit['status'],
   additionalData?: Partial<PendingDeposit>
-): PendingDeposit | null {
-  const deposits = loadPendingDeposits();
+): Promise<PendingDeposit | null> {
+  const deposits = await loadPendingDeposits();
   const index = deposits.findIndex(d => d.paymentId === paymentId);
   
   if (index !== -1) {
@@ -91,38 +81,38 @@ export function updateDepositStatus(
       ...additionalData,
       status,
     };
-    savePendingDeposits(deposits);
+    await savePendingDeposits(deposits);
     console.log('Updated deposit status:', deposits[index].paymentId, '->', status);
     return deposits[index];
   }
   return null;
 }
 
-export function getDepositByPaymentId(paymentId: string): PendingDeposit | null {
-  const deposits = loadPendingDeposits();
+export async function getDepositByPaymentId(paymentId: string): Promise<PendingDeposit | null> {
+  const deposits = await loadPendingDeposits();
   return deposits.find(d => d.paymentId === paymentId) || null;
 }
 
-export function getDepositsByWallet(walletAddress: string): PendingDeposit[] {
-  const deposits = loadPendingDeposits();
+export async function getDepositsByWallet(walletAddress: string): Promise<PendingDeposit[]> {
+  const deposits = await loadPendingDeposits();
   return deposits.filter(d => d.walletAddress === walletAddress);
 }
 
-export function getPendingDeposits(): PendingDeposit[] {
-  const deposits = loadPendingDeposits();
+export async function getPendingDeposits(): Promise<PendingDeposit[]> {
+  const deposits = await loadPendingDeposits();
   return deposits.filter(d => d.status === 'pending' || d.status === 'sent');
 }
 
-export function getConfirmedDeposits(): PendingDeposit[] {
-  const deposits = loadPendingDeposits();
+export async function getConfirmedDeposits(): Promise<PendingDeposit[]> {
+  const deposits = await loadPendingDeposits();
   return deposits.filter(d => d.status === 'confirmed' || d.status === 'credited');
 }
 
 // Mark deposit as sent (transaction submitted to blockchain)
-export function markDepositAsSent(
+export async function markDepositAsSent(
   paymentId: string, 
   transactionSignature: string
-): PendingDeposit | null {
+): Promise<PendingDeposit | null> {
   return updateDepositStatus(paymentId, 'sent', {
     transactionSignature,
     sentAt: new Date().toISOString(),
@@ -130,18 +120,18 @@ export function markDepositAsSent(
 }
 
 // Mark deposit as confirmed (Cryptomus detected the payment)
-export function markDepositAsConfirmed(paymentId: string): PendingDeposit | null {
+export async function markDepositAsConfirmed(paymentId: string): Promise<PendingDeposit | null> {
   return updateDepositStatus(paymentId, 'confirmed', {
     confirmedAt: new Date().toISOString(),
   });
 }
 
 // Mark deposit as credited (funds available in Kripicard)
-export function markDepositAsCredited(
+export async function markDepositAsCredited(
   paymentId: string, 
   cardCreated: boolean = false,
   cardId?: string
-): PendingDeposit | null {
+): Promise<PendingDeposit | null> {
   return updateDepositStatus(paymentId, 'credited', {
     creditedAt: new Date().toISOString(),
     cardCreated,
@@ -150,13 +140,13 @@ export function markDepositAsCredited(
 }
 
 // Mark deposit as failed
-export function markDepositAsFailed(paymentId: string, error: string): PendingDeposit | null {
+export async function markDepositAsFailed(paymentId: string, error: string): Promise<PendingDeposit | null> {
   return updateDepositStatus(paymentId, 'failed', { error });
 }
 
 // Clean up old deposits (older than 7 days)
-export function cleanupExpiredDeposits(): number {
-  const deposits = loadPendingDeposits();
+export async function cleanupExpiredDeposits(): Promise<number> {
+  const deposits = await loadPendingDeposits();
   const now = Date.now();
   const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
   
@@ -172,7 +162,7 @@ export function cleanupExpiredDeposits(): number {
   }
   
   if (expiredCount > 0) {
-    savePendingDeposits(deposits);
+    await savePendingDeposits(deposits);
     console.log(`Expired ${expiredCount} old deposits`);
   }
   
@@ -180,7 +170,7 @@ export function cleanupExpiredDeposits(): number {
 }
 
 // Get deposit summary
-export function getDepositSummary(): {
+export async function getDepositSummary(): Promise<{
   total: number;
   pending: number;
   sent: number;
@@ -189,8 +179,8 @@ export function getDepositSummary(): {
   failed: number;
   expired: number;
   totalAmountUsd: number;
-} {
-  const deposits = loadPendingDeposits();
+}> {
+  const deposits = await loadPendingDeposits();
   
   return {
     total: deposits.length,
@@ -203,4 +193,3 @@ export function getDepositSummary(): {
     totalAmountUsd: deposits.reduce((sum, d) => sum + d.amountUsd, 0),
   };
 }
-

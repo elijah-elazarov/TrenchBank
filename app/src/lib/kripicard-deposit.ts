@@ -137,6 +137,14 @@ export async function autoDepositToKripicard(amountUsd: number): Promise<Deposit
     const depositInfo = await initiateDeposit(amountUsd, 'solana');
     console.log('Deposit info:', depositInfo);
 
+    // Validate deposit info
+    if (!depositInfo.address) {
+      return {
+        success: false,
+        message: 'Failed to get deposit address from Kripicard',
+      };
+    }
+
     // Step 5: Send SOL to Kripicard deposit address with memo
     console.log('Sending SOL to Kripicard...');
     const txSignature = await sendSolWithMemo(
@@ -144,7 +152,7 @@ export async function autoDepositToKripicard(amountUsd: number): Promise<Deposit
       treasuryKeypair,
       depositInfo.address,
       amountSol,
-      depositInfo.reference
+      depositInfo.reference || ''
     );
     console.log('Transaction signature:', txSignature);
 

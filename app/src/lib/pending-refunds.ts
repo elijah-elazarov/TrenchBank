@@ -4,13 +4,13 @@
  * When a card creation fails on KripiCard but money was already taken,
  * KripiCard sends a refund back. This module tracks pending refunds
  * and credits users when refunds are detected.
+ * 
+ * Uses Vercel KV for persistent storage.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { kv } from '@vercel/kv';
 
-const DATA_DIR = join(process.cwd(), 'data');
-const REFUNDS_FILE = join(DATA_DIR, 'pending_refunds.json');
+const REFUNDS_KEY = 'pending_refunds';
 
 export interface PendingRefund {
   id: string;
@@ -24,37 +24,27 @@ export interface PendingRefund {
   creditedAt?: string;
 }
 
-function ensureDataDir(): void {
-  if (!existsSync(DATA_DIR)) {
-    mkdirSync(DATA_DIR, { recursive: true });
-  }
-}
-
-export function loadPendingRefunds(): PendingRefund[] {
+export async function loadPendingRefunds(): Promise<PendingRefund[]> {
   try {
-    ensureDataDir();
-    if (existsSync(REFUNDS_FILE)) {
-      const data = JSON.parse(readFileSync(REFUNDS_FILE, 'utf-8'));
-      return data;
-    }
-    return [];
+    const refunds = await kv.get<PendingRefund[]>(REFUNDS_KEY);
+    return refunds || [];
   } catch (error) {
     console.error('Failed to load pending refunds:', error);
     return [];
   }
 }
 
-export function savePendingRefunds(refunds: PendingRefund[]): void {
+export async function savePendingRefunds(refunds: PendingRefund[]): Promise<void> {
   try {
-    ensureDataDir();
-    writeFileSync(REFUNDS_FILE, JSON.stringify(refunds, null, 2));
+    await kv.set(REFUNDS_KEY, refunds);
   } catch (error) {
     console.error('Failed to save pending refunds:', error);
+    throw error;
   }
 }
 
-export function addPendingRefund(refund: Omit<PendingRefund, 'id' | 'createdAt' | 'status'>): PendingRefund {
-  const refunds = loadPendingRefunds();
+export async function addPendingRefund(refund: Omit<PendingRefund, 'id' | 'createdAt' | 'status'>): Promise<PendingRefund> {
+  const refunds = await loadPendingRefunds();
   
   const newRefund: PendingRefund = {
     ...refund,
@@ -64,18 +54,18 @@ export function addPendingRefund(refund: Omit<PendingRefund, 'id' | 'createdAt' 
   };
   
   refunds.push(newRefund);
-  savePendingRefunds(refunds);
+  await savePendingRefunds(refunds);
   
   console.log('Added pending refund:', newRefund);
   return newRefund;
 }
 
-export function updateRefundStatus(
+export async function updateRefundStatus(
   refundId: string, 
   status: PendingRefund['status'],
   additionalData?: Partial<PendingRefund>
-): void {
-  const refunds = loadPendingRefunds();
+): Promise<void> {
+  const refunds = await loadPendingRefunds();
   const index = refunds.findIndex(r => r.id === refundId);
   
   if (index !== -1) {
@@ -84,24 +74,24 @@ export function updateRefundStatus(
       ...additionalData,
       status,
     };
-    savePendingRefunds(refunds);
+    await savePendingRefunds(refunds);
     console.log('Updated refund status:', refunds[index]);
   }
 }
 
-export function getPendingRefundsForWallet(walletAddress: string): PendingRefund[] {
-  const refunds = loadPendingRefunds();
+export async function getPendingRefundsForWallet(walletAddress: string): Promise<PendingRefund[]> {
+  const refunds = await loadPendingRefunds();
   return refunds.filter(r => r.walletAddress === walletAddress && r.status === 'pending');
 }
 
-export function getAllPendingRefunds(): PendingRefund[] {
-  const refunds = loadPendingRefunds();
+export async function getAllPendingRefunds(): Promise<PendingRefund[]> {
+  const refunds = await loadPendingRefunds();
   return refunds.filter(r => r.status === 'pending');
 }
 
 // Clean up old refunds (older than 24 hours)
-export function cleanupExpiredRefunds(): void {
-  const refunds = loadPendingRefunds();
+export async function cleanupExpiredRefunds(): Promise<void> {
+  const refunds = await loadPendingRefunds();
   const now = Date.now();
   const ONE_DAY = 24 * 60 * 60 * 1000;
   
@@ -117,7 +107,6 @@ export function cleanupExpiredRefunds(): void {
   }
   
   if (changed) {
-    savePendingRefunds(refunds);
+    await savePendingRefunds(refunds);
   }
 }
-

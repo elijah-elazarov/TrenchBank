@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { join } from 'path';
+import { kv } from '@vercel/kv';
 
-// File-based balance store (persists across server restarts)
-// In production, this would be a database
-const BALANCE_FILE = join(process.cwd(), 'data', 'balances.json');
+// Key prefix for balance storage
+const BALANCE_PREFIX = 'balance:';
 
 interface UserBalance {
   balance: number;
@@ -13,36 +11,38 @@ interface UserBalance {
   lastUpdated: string;
 }
 
-// Load balances from file
-function loadBalances(): Map<string, UserBalance> {
+// Get balance from Vercel KV
+async function getBalance(walletAddress: string): Promise<UserBalance> {
   try {
-    if (existsSync(BALANCE_FILE)) {
-      const data = JSON.parse(readFileSync(BALANCE_FILE, 'utf-8'));
-      return new Map(Object.entries(data));
-    }
+    const balance = await kv.get<UserBalance>(`${BALANCE_PREFIX}${walletAddress}`);
+    return balance || {
+      balance: 0,
+      totalDeposited: 0,
+      totalSpent: 0,
+      lastUpdated: new Date().toISOString(),
+    };
   } catch (error) {
-    console.error('Failed to load balances:', error);
-  }
-  return new Map();
-}
-
-// Save balances to file
-function saveBalances(balances: Map<string, UserBalance>): void {
-  try {
-    // Ensure data directory exists
-    const dataDir = join(process.cwd(), 'data');
-    if (!existsSync(dataDir)) {
-      const { mkdirSync } = require('fs');
-      mkdirSync(dataDir, { recursive: true });
-    }
-    const data = Object.fromEntries(balances);
-    writeFileSync(BALANCE_FILE, JSON.stringify(data, null, 2));
-  } catch (error) {
-    console.error('Failed to save balances:', error);
+    console.error('Failed to get balance from KV:', error);
+    return {
+      balance: 0,
+      totalDeposited: 0,
+      totalSpent: 0,
+      lastUpdated: new Date().toISOString(),
+    };
   }
 }
 
-// Get balance - always reload from file to ensure fresh data
+// Save balance to Vercel KV
+async function saveBalance(walletAddress: string, balance: UserBalance): Promise<void> {
+  try {
+    await kv.set(`${BALANCE_PREFIX}${walletAddress}`, balance);
+  } catch (error) {
+    console.error('Failed to save balance to KV:', error);
+    throw error;
+  }
+}
+
+// Get balance
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -55,14 +55,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Always reload from file to get fresh data
-    const freshBalances = loadBalances();
-    const balance = freshBalances.get(walletAddress) || {
-      balance: 0,
-      totalDeposited: 0,
-      totalSpent: 0,
-      lastUpdated: new Date().toISOString(),
-    };
+    const balance = await getBalance(walletAddress);
 
     return NextResponse.json({
       success: true,
@@ -93,14 +86,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Always reload from file to get fresh data before updating
-    const freshBalances = loadBalances();
-    const current = freshBalances.get(walletAddress) || {
-      balance: 0,
-      totalDeposited: 0,
-      totalSpent: 0,
-      lastUpdated: new Date().toISOString(),
-    };
+    const current = await getBalance(walletAddress);
 
     if (action === 'credit') {
       // Add funds (deposit completed)
@@ -124,10 +110,7 @@ export async function POST(request: NextRequest) {
     }
 
     current.lastUpdated = new Date().toISOString();
-    freshBalances.set(walletAddress, current);
-    
-    // Persist to file
-    saveBalances(freshBalances);
+    await saveBalance(walletAddress, current);
 
     return NextResponse.json({
       success: true,
@@ -144,9 +127,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
-// Helper function to get fresh balances (for use in other modules)
-export function getFreshBalances(): Map<string, UserBalance> {
-  return loadBalances();
-}
-

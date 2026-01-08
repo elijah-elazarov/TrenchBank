@@ -14,6 +14,8 @@ export interface DepositInfo {
   cryptomusUuid: string;
   amount: number;
   currency: string;
+  address?: string; // Deposit address
+  reference?: string; // Deposit reference/memo
 }
 
 export interface KripicardBalance {
@@ -433,4 +435,34 @@ export async function getCryptomusDepositAddress(
  */
 export function clearSession(): void {
   cachedSession = null;
+}
+
+/**
+ * Check deposit status by reference
+ * Returns whether the deposit has been credited to Kripicard balance
+ */
+export async function checkDepositStatus(reference: string): Promise<{ credited: boolean; balance?: number }> {
+  try {
+    // Get current balance and check if it's increased
+    const balanceInfo = await getKripicardBalance();
+    
+    // For now, we can't directly check if a specific deposit was credited
+    // We would need to track the previous balance and compare
+    // This is a simplified implementation that just returns the current balance
+    console.log(`Checking deposit status for reference: ${reference}`);
+    console.log(`Current Kripicard balance: $${balanceInfo.available}`);
+    
+    // In a real implementation, you would:
+    // 1. Store the balance before initiating the deposit
+    // 2. Compare with current balance to see if deposit arrived
+    // 3. Check transaction history if available
+    
+    return {
+      credited: false, // Default to false, caller should compare balances
+      balance: balanceInfo.available,
+    };
+  } catch (error) {
+    console.error('Failed to check deposit status:', error);
+    return { credited: false };
+  }
 }

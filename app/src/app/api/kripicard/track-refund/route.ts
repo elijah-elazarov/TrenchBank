@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Add to pending refunds tracker
-    const refund = addPendingRefund({
+    const refund = await addPendingRefund({
       walletAddress,
       amount,
       reason: reason || 'Card creation failed',
@@ -40,4 +40,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

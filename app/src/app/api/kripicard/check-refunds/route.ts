@@ -3,36 +3,14 @@ import {
   loadPendingRefunds, 
   updateRefundStatus, 
   cleanupExpiredRefunds,
-  PendingRefund 
 } from '@/lib/pending-refunds';
-
-const KRIPICARD_BASE_URL = 'https://kripicard.com/api/premium';
-
-// Get current KripiCard balance
-async function getKripiCardBalance(): Promise<number | null> {
-  try {
-    const apiKey = process.env.KRIPICARD_API_KEY;
-    if (!apiKey) return null;
-
-    // Try to get balance from the API
-    // Note: KripiCard may not have a direct balance API, 
-    // so we might need to scrape the dashboard or use another method
-    
-    // For now, we'll create an endpoint that can be called manually
-    // with the current balance as a parameter
-    return null;
-  } catch (error) {
-    console.error('Failed to get KripiCard balance:', error);
-    return null;
-  }
-}
 
 export async function GET() {
   try {
     // Clean up expired refunds
-    cleanupExpiredRefunds();
+    await cleanupExpiredRefunds();
     
-    const pendingRefunds = loadPendingRefunds();
+    const pendingRefunds = await loadPendingRefunds();
     const pending = pendingRefunds.filter(r => r.status === 'pending');
     
     return NextResponse.json({
@@ -63,7 +41,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const pendingRefunds = loadPendingRefunds();
+    const pendingRefunds = await loadPendingRefunds();
     const refund = pendingRefunds.find(r => r.id === refundId);
 
     if (!refund) {
@@ -117,7 +95,7 @@ export async function POST(request: Request) {
     }
 
     // Update refund status
-    updateRefundStatus(refundId, 'credited', {
+    await updateRefundStatus(refundId, 'credited', {
       creditedAt: new Date().toISOString(),
     });
 
@@ -139,4 +117,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

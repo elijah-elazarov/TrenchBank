@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
 import {
   loadPendingDeposits,
   getDepositByPaymentId,
@@ -9,19 +8,6 @@ import {
   getDepositSummary,
   addPendingDeposit,
 } from '@/lib/pending-deposits';
-
-// Verify Cryptomus webhook signature
-function verifySignature(body: string, signature: string): boolean {
-  const apiKey = process.env.CRYPTOMUS_API_KEY;
-  if (!apiKey) return false;
-  
-  const expectedSignature = crypto
-    .createHash('md5')
-    .update(Buffer.from(body).toString('base64') + apiKey)
-    .digest('hex');
-  
-  return signature === expectedSignature;
-}
 
 // Cryptomus webhook payload type
 interface CryptomusWebhook {
@@ -58,24 +44,17 @@ export async function POST(request: NextRequest) {
     console.log('Network:', webhookData.network);
     console.log('Is Final:', webhookData.is_final);
     console.log('TXID:', webhookData.txid);
-    
-    // Verify signature (optional but recommended)
-    // const signature = request.headers.get('sign') || webhookData.sign;
-    // if (!verifySignature(body, signature)) {
-    //   console.error('Invalid webhook signature');
-    //   return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-    // }
 
     const paymentId = webhookData.uuid;
     const status = webhookData.status;
     
     // Check if we're tracking this deposit
-    let deposit = getDepositByPaymentId(paymentId);
+    let deposit = await getDepositByPaymentId(paymentId);
     
     if (!deposit) {
       // New deposit we didn't track - add it
       console.log(`New deposit from webhook: ${paymentId}`);
-      deposit = addPendingDeposit({
+      deposit = await addPendingDeposit({
         paymentId,
         amountUsd: parseFloat(webhookData.payment_amount_usd) || 0,
         amountCrypto: `${webhookData.payment_amount} ${webhookData.currency}`,
@@ -85,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     // Update deposit status based on Cryptomus status
     if (status === 'paid' || status === 'paid_over' || status === 'confirm_check') {
-      markDepositAsConfirmed(paymentId);
+      await markDepositAsConfirmed(paymentId);
       console.log(`✅ Deposit ${paymentId} confirmed!`);
       
       // Automatically try to create a card
@@ -100,19 +79,19 @@ export async function POST(request: NextRequest) {
           
           const cardResult = await cardResponse.json();
           if (cardResult.success) {
-            markDepositAsCredited(paymentId, true, cardResult.cardId);
+            await markDepositAsCredited(paymentId, true, cardResult.cardId);
             console.log('🎉 Card created automatically!', cardResult);
           } else {
-            markDepositAsCredited(paymentId, false);
+            await markDepositAsCredited(paymentId, false);
             console.log('Card creation failed:', cardResult.message);
           }
         } catch (cardError) {
           console.error('Error creating card:', cardError);
-          markDepositAsCredited(paymentId, false);
+          await markDepositAsCredited(paymentId, false);
         }
       }
     } else if (status === 'cancel' || status === 'fail' || status === 'wrong_amount') {
-      markDepositAsFailed(paymentId, `Payment ${status}`);
+      await markDepositAsFailed(paymentId, `Payment ${status}`);
       console.log(`❌ Deposit ${paymentId} failed: ${status}`);
     }
 
@@ -139,7 +118,7 @@ export async function GET(request: NextRequest) {
   const paymentId = searchParams.get('paymentId');
   
   if (paymentId) {
-    const deposit = getDepositByPaymentId(paymentId);
+    const deposit = await getDepositByPaymentId(paymentId);
     if (deposit) {
       return NextResponse.json({ success: true, deposit });
     }
@@ -147,8 +126,8 @@ export async function GET(request: NextRequest) {
   }
   
   // Return all deposits and summary
-  const deposits = loadPendingDeposits();
-  const summary = getDepositSummary();
+  const deposits = await loadPendingDeposits();
+  const summary = await getDepositSummary();
   
   return NextResponse.json({
     success: true,
