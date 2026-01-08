@@ -6,9 +6,9 @@ export const metadata: Metadata = {
   title: "$KryptCash | Money Tools Built With Love",
   description: "Stake $KryptCash and earn real SOL rewards from PumpSwap trading fees",
   icons: {
-    icon: "/favicon.png",
-    shortcut: "/favicon.png",
-    apple: "/favicon.png",
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+    apple: "/favicon.svg",
   },
   openGraph: {
     title: "$KryptCash | Money Tools Built With Love",
@@ -39,7 +39,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <link rel="icon" href="/favicon.png" type="image/png" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
       </head>
       <body className="bg-trench-black min-h-screen antialiased">
         <Providers>{children}</Providers>
