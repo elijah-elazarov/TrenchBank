@@ -73,30 +73,35 @@ export default function CardsPage() {
       
       // Fetch cards from server storage (persists across browsers)
       const loadCards = async () => {
+        // Always get localStorage cards first
+        const localCards = getStoredCards(walletAddress);
+        
         try {
           const response = await fetch(`/api/cards/store?walletAddress=${encodeURIComponent(walletAddress)}`);
           const data = await response.json();
           
           if (data.success && data.cards && data.cards.length > 0) {
-            // Use server-side cards
-            setCards(data.cards);
-            if (data.cards.length > 0 && !selectedCard) {
-              setSelectedCard(data.cards[0]);
+            // Merge server cards with local cards (server takes priority)
+            const serverCardIds = new Set(data.cards.map((c: StoredCard) => c.cardId));
+            const uniqueLocalCards = localCards.filter(c => !serverCardIds.has(c.cardId));
+            const mergedCards = [...data.cards, ...uniqueLocalCards];
+            
+            setCards(mergedCards);
+            if (mergedCards.length > 0 && !selectedCard) {
+              setSelectedCard(mergedCards[0]);
             }
           } else {
-            // Fallback to localStorage
-            const storedCards = getStoredCards(walletAddress);
-            setCards(storedCards);
-            if (storedCards.length > 0 && !selectedCard) {
-              setSelectedCard(storedCards[0]);
+            // Server has no cards, use localStorage
+            setCards(localCards);
+            if (localCards.length > 0 && !selectedCard) {
+              setSelectedCard(localCards[0]);
             }
           }
         } catch {
           // Fallback to localStorage on error
-          const storedCards = getStoredCards(walletAddress);
-          setCards(storedCards);
-          if (storedCards.length > 0 && !selectedCard) {
-            setSelectedCard(storedCards[0]);
+          setCards(localCards);
+          if (localCards.length > 0 && !selectedCard) {
+            setSelectedCard(localCards[0]);
           }
         }
       };
@@ -214,11 +219,12 @@ export default function CardsPage() {
           balance: amount,
         };
 
+        // Save to localStorage first (always works)
         storeCard(newCard);
         
         // Also persist to server (Vercel KV) for cross-device persistence
         try {
-          await fetch('/api/cards/store', {
+          const storeResponse = await fetch('/api/cards/store', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -227,6 +233,10 @@ export default function CardsPage() {
               balance: newCard.balance,
             }),
           });
+          const storeData = await storeResponse.json();
+          if (!storeData.success) {
+            console.error('Failed to persist card to KV:', storeData.message);
+          }
         } catch (e) {
           console.error('Failed to persist card to server:', e);
         }
