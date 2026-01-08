@@ -1,0 +1,32 @@
+{
+  "name": "kryptcash-staking-infra",
+  "version": "2.0.0",
+  "description": "PumpSwap LP + Streamflow staking infrastructure for $KryptCash",
+  "type": "module",
+  "scripts": {
+    "lp:add": "node --loader ts-node/esm src/pumpswap-lp.ts add",
+    "lp:remove": "node --loader ts-node/esm src/pumpswap-lp.ts remove",
+    "lp:status": "node --loader ts-node/esm src/pumpswap-lp.ts status",
+    "claim:creator": "node --loader ts-node/esm src/claim-creator-fees.ts",
+    "setup:staking": "node --loader ts-node/esm src/setup-streamflow.ts",
+    "router:start": "node --loader ts-node/esm src/fee-router.ts",
+    "router:dev": "nodemon --exec 'node --loader ts-node/esm' src/fee-router.ts",
+    "check:status": "node --loader ts-node/esm src/check-status.ts"
+  },
+  "dependencies": {
+    "@pump-fun/pump-swap-sdk": "^1.11.0",
+    "@coral-xyz/anchor": "^0.32.0",
+    "@streamflow/staking": "^10.0.3",
+    "@solana/web3.js": "^1.91.1",
+    "@solana/spl-token": "^0.4.6",
+    "bs58": "^5.0.0",
+    "decimal.js": "^10.4.3",
+    "dotenv": "^16.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "nodemon": "^3.0.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}

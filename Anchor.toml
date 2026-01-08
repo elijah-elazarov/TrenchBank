@@ -1,0 +1,25 @@
+[toolchain]
+anchor_version = "0.32.1"
+
+[features]
+seeds = false
+skip-lint = false
+
+[programs.localnet]
+memecoin_staking = "2RoYimfnkSHZTFrjzLNYt5DSJKPm6VHRbg2k3sfmyCDB"
+
+[programs.devnet]
+memecoin_staking = "2RoYimfnkSHZTFrjzLNYt5DSJKPm6VHRbg2k3sfmyCDB"
+
+[programs.mainnet]
+memecoin_staking = "2RoYimfnkSHZTFrjzLNYt5DSJKPm6VHRbg2k3sfmyCDB"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "mainnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "npx ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"

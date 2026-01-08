@@ -1,0 +1,3 @@
+channel: v1.18.22
+commit: b286211c1c583245ce7dede775f96235ab13d9e2
+target: aarch64-apple-darwin
