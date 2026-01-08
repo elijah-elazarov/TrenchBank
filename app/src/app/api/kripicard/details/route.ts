@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 const KRIPICARD_BASE_URL = 'https://kripicard.com/api/premium';
 
 export async function GET(request: NextRequest) {
