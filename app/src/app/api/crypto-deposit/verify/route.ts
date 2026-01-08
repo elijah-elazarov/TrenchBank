@@ -11,7 +11,7 @@ async function loadUsedTransactions(): Promise<Set<string>> {
     return new Set(txArray || []);
   } catch (error) {
     console.error('Failed to load used transactions:', error);
-    return new Set();
+  return new Set();
   }
 }
 

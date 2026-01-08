@@ -83,11 +83,11 @@ export async function GET(request: NextRequest) {
       // Try MM/YY or MM/YYYY format
       if (expiryStr.includes('/')) {
         const parts = expiryStr.split('/');
-        if (parts.length === 2) {
-          expiryMonth = parts[0].trim();
-          expiryYear = parts[1].trim();
-        }
-      } 
+      if (parts.length === 2) {
+        expiryMonth = parts[0].trim();
+        expiryYear = parts[1].trim();
+      }
+    }
       // Try MM-YY or MM-YYYY format
       else if (expiryStr.includes('-')) {
         const parts = expiryStr.split('-');

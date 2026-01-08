@@ -70,10 +70,10 @@ export function VirtualCard({
   const hasExpiryData = () => {
     // Check API details first
     if (details) {
-      const month = details.expiry_month;
-      const year = details.expiry_year;
-      const monthInvalid = !month || month === "" || month === "undefined" || month === "null";
-      const yearInvalid = !year || year === "" || year === "undefined" || year === "null";
+    const month = details.expiry_month;
+    const year = details.expiry_year;
+    const monthInvalid = !month || month === "" || month === "undefined" || month === "null";
+    const yearInvalid = !year || year === "" || year === "undefined" || year === "null";
       if (!monthInvalid && !yearInvalid) return true;
     }
     // Fallback to stored expiry
@@ -99,8 +99,8 @@ export function VirtualCard({
       if (monthValid && yearValid) {
         const formattedMonth = String(month).padStart(2, "0");
         const yearStr = String(year);
-        const formattedYear = yearStr.length === 4 ? yearStr.slice(-2) : yearStr.padStart(2, "0");
-        return `${formattedMonth}/${formattedYear}`;
+    const formattedYear = yearStr.length === 4 ? yearStr.slice(-2) : yearStr.padStart(2, "0");
+    return `${formattedMonth}/${formattedYear}`;
       }
     }
     
