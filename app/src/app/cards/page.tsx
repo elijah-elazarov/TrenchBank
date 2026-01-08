@@ -215,6 +215,22 @@ export default function CardsPage() {
         };
 
         storeCard(newCard);
+        
+        // Also persist to server (Vercel KV) for cross-device persistence
+        try {
+          await fetch('/api/cards/store', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              cardId: newCard.cardId,
+              walletAddress: newCard.walletAddress,
+              balance: newCard.balance,
+            }),
+          });
+        } catch (e) {
+          console.error('Failed to persist card to server:', e);
+        }
+        
         setCards((prev) => [...prev, newCard]);
         setSelectedCard(newCard);
         setShowCreateModal(false);
